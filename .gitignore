@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment / secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+
+# Docker volumes / data
+postgres_data/
+redis_data/
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build caches
+.vite/
+
+# AI / internal reports (not part of the project)
+CLAUDE.md
+BACKEND_FIX_SUMMARY.md
+ERROR_ANALYSIS_REPORT.md
+TEST_REPORT.md
+final_test.py
+
+# Celery
+celerybeat-schedule
+celerybeat.pid

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CodeFlow3D — Admin Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="src/admin.css" />
+</head>
+<body>
+    <!-- Login gate -->
+    <div id="loginGate" class="login-gate">
+        <div class="login-card">
+            <h1>🔐 Admin Login</h1>
+            <p>Sign in with an admin account.</p>
+            <input type="email" id="adminEmail" placeholder="Email" autocomplete="email" />
+            <input type="password" id="adminPassword" placeholder="Password" autocomplete="current-password" />
+            <button id="adminLoginBtn">Sign In</button>
+            <div id="loginError" class="error-text"></div>
+        </div>
+    </div>
+
+    <!-- Admin shell (hidden until auth) -->
+    <div id="adminShell" class="admin-shell" style="display:none">
+        <nav class="sidebar">
+            <div class="sidebar-brand">
+                <h2>CodeFlow3D</h2>
+                <span class="badge">Admin</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#" data-page="dashboard" class="active">📊 Dashboard</a></li>
+                <li><a href="#" data-page="users">👥 Users</a></li>
+                <li><a href="#" data-page="settings">⚙️ Settings</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <span id="adminName"></span>
+                <button id="logoutBtn" title="Sign out">↩ Logout</button>
+                <a href="/" class="back-link">← Back to App</a>
+            </div>
+        </nav>
+        <main class="content">
+            <!-- Dashboard page -->
+            <section id="page-dashboard" class="page active">
+                <h2>Dashboard</h2>
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card"><div class="stat-value" id="statUsers">-</div><div class="stat-label">Total Users</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statActive">-</div><div class="stat-label">Active Users</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statSignups">-</div><div class="stat-label">Signups Today</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statAnalyses">-</div><div class="stat-label">Total Analyses</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statToday">-</div><div class="stat-label">Analyses Today</div></div>
+                    <div class="stat-card"><div class="stat-value" id="statGraphs">-</div><div class="stat-label">Saved Graphs</div></div>
+                </div>
+                <div class="card-row">
+                    <div class="card">
+                        <h3>Subscriptions</h3>
+                        <div id="subBreakdown" class="breakdown-list"></div>
+                    </div>
+                    <div class="card">
+                        <h3>Languages Used</h3>
+                        <div id="langBreakdown" class="breakdown-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Users page -->
+            <section id="page-users" class="page">
+                <h2>User Management</h2>
+                <div class="toolbar">
+                    <input type="text" id="userSearch" placeholder="Search users..." />
+                    <button id="userSearchBtn">Search</button>
+                </div>
+                <table class="data-table" id="usersTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th><th>Username</th><th>Email</th><th>Plan</th>
+                            <th>Analyses</th><th>Keys</th><th>Status</th><th>Admin</th><th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersBody"></tbody>
+                </table>
+                <div class="pagination" id="usersPagination"></div>
+            </section>
+
+            <!-- Settings page -->
+            <section id="page-settings" class="page">
+                <h2>Site Settings</h2>
+                <div class="settings-grid">
+                    <div class="card">
+                        <h3>Contact Email</h3>
+                        <p class="card-desc">The email address users will contact for plan upgrades and support.</p>
+                        <div class="form-group">
+                            <label>Contact Email</label>
+                            <input type="email" id="settingContactEmail" placeholder="admin@codeflow3d.com" />
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Upgrade Instructions</h3>
+                        <p class="card-desc">Message shown to users explaining how to upgrade their plan.</p>
+                        <div class="form-group">
+                            <label>Instructions Text</label>
+                            <textarea id="settingUpgradeInstructions" rows="3" placeholder="To upgrade your plan, send an email..."></textarea>
+                        </div>
+                    </div>
+                    <div class="card">
+                        <h3>Plan Pricing</h3>
+                        <p class="card-desc">Set the monthly price (in USD) displayed to users for each plan.</p>
+                        <div class="form-group">
+                            <label>Free Plan Price ($)</label>
+                            <input type="number" id="settingPriceFree" min="0" step="1" placeholder="0" />
+                        </div>
+                        <div class="form-group">
+                            <label>Pro Plan Price ($)</label>
+                            <input type="number" id="settingPricePro" min="0" step="1" placeholder="19" />
+                        </div>
+                        <div class="form-group">
+                            <label>Enterprise Plan Price ($)</label>
+                            <input type="number" id="settingPriceEnterprise" min="0" step="1" placeholder="99" />
+                        </div>
+                    </div>
+                </div>
+                <div class="form-actions" style="margin-top:16px">
+                    <button id="saveSettingsBtn" class="btn-primary">Save Settings</button>
+                    <span id="settingsSaveStatus" class="save-status"></span>
+                </div>
+            </section>
+
+            <!-- User detail modal -->
+            <div id="userModal" class="modal-overlay" style="display:none">
+                <div class="modal-card">
+                    <div class="modal-header">
+                        <h3 id="modalTitle">User Details</h3>
+                        <button id="modalClose" class="close-btn">&times;</button>
+                    </div>
+                    <div class="modal-body" id="modalBody"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="src/admin.js"></script>
+</body>
+</html>

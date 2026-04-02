@@ -1,0 +1,18 @@
+{
+  "name": "codeflow3d-frontend",
+  "version": "1.0.0",
+  "description": "3D Control Flow Visualization Frontend",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-basic-ssl": "^1.0.0"
+  }
+}

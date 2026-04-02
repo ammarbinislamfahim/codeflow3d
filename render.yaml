@@ -1,0 +1,76 @@
+# Render Blueprint — deploys all CodeFlow3D backend services in one click
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────
+  - type: web
+    name: codeflow3d-backend
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    healthCheckPath: /ping
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: codeflow3d-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: codeflow3d-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_ORIGINS
+        # Set this to your Netlify URL after deployment, e.g.:
+        # https://your-site-name.netlify.app
+        value: https://your-site-name.netlify.app
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+
+  # ── Celery Worker ────────────────────────────────────────────────────────
+  - type: worker
+    name: codeflow3d-worker
+    runtime: python
+    region: oregon
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: celery -A celery_tasks worker --loglevel=info --concurrency=2
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: codeflow3d-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: codeflow3d-redis
+          type: redis
+          property: connectionString
+      - key: SECRET_KEY
+        fromService:
+          name: codeflow3d-backend
+          type: web
+          envVarKey: SECRET_KEY
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+
+  # ── Redis ────────────────────────────────────────────────────────────────
+  - type: redis
+    name: codeflow3d-redis
+    region: oregon
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+
+databases:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────
+  - name: codeflow3d-db
+    region: oregon
+    plan: free
+    databaseName: codeflow_db
+    user: codeflow

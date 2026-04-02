@@ -1,0 +1,177 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: codeflow_postgres
+    environment:
+      POSTGRES_USER: codeflow
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: codeflow_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codeflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - codeflow_network
+
+  # Redis Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: codeflow_redis
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - codeflow_network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codeflow_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:-password}@postgres:5432/codeflow_db
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-codeflow3d-dev-secret-key-min32chars!!}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5500}
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - codeflow_network
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codeflow_worker
+    working_dir: /app
+    command: celery -A celery_tasks worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:-password}@postgres:5432/codeflow_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import redis, os; r=redis.from_url(os.environ['REDIS_URL']); r.ping(); print('ok')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - codeflow_network
+
+  # Celery Beat (scheduler)
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: codeflow_beat
+    working_dir: /app
+    command: celery -A celery_tasks beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:-password}@postgres:5432/codeflow_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import redis, os; r=redis.from_url(os.environ['REDIS_URL']); r.ping()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    networks:
+      - codeflow_network
+
+  # Frontend (Development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+    container_name: codeflow_frontend
+    ports:
+      - "5500:5500"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - codeflow_network
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: codeflow_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
+    networks:
+      - codeflow_network
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: codeflow_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - codeflow_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  codeflow_network:
+    driver: bridge

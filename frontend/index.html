@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CodeFlow3D - 3D Control Flow Visualization</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+    <link rel="stylesheet" href="src/style.css" />
+    <script src="https://unpkg.com/monaco-editor@0.52.0/min/vs/loader.js"></script>
+</head>
+<body>
+    <!-- Error notification box -->
+    <div id="errorBox" class="error-box"></div>
+
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner">⏳ Rendering...</div>
+    </div>
+
+    <!-- Header -->
+    <header class="app-header">
+        <div class="brand-block">
+            <h1>CodeFlow3D</h1>
+            <p class="brand-subtitle">3D Control Flow Visualization</p>
+        </div>
+        <div class="controls-shell">
+            <div class="controls-primary">
+                <label for="language">Language:</label>
+                <select id="language">
+                    <option value="c" selected>C</option>
+                    <option value="cpp">C++</option>
+                    <option value="python">Python</option>
+                    <option value="java">Java</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="typescript">TypeScript</option>
+                </select>
+                <button id="generateBtn" title="Analyze code and generate flow map">
+                    ▶ Generate
+                </button>
+                <button id="testBtn" class="ctrl-icon-btn" title="Test with sample data">
+                    🧪
+                </button>
+            </div>
+            <div class="controls-secondary">
+                <button id="findStartBtn" class="ctrl-icon-btn" title="Fly to START node">
+                    🟢
+                </button>
+                <button id="resetBtn" class="ctrl-icon-btn" title="Reset camera view">
+                    🎥
+                </button>
+                <button id="exportBtn" class="ctrl-icon-btn" title="Export SVG" style="display:none">
+                    🖼️
+                </button>
+                <button id="saveBtn" class="ctrl-icon-btn" title="Save graph" style="display:none">
+                    💾
+                </button>
+                <button id="graphsBtn" class="ctrl-icon-btn" title="Saved graphs">
+                    📂
+                </button>
+                <button id="settingsBtn" class="ctrl-icon-btn" title="Settings &amp; API keys">
+                    ⚙
+                </button>
+                <button id="helpBtn" class="ctrl-icon-btn" title="How to use">
+                    ❓
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Onboarding tour overlay -->
+    <div id="tourOverlay" class="tour-overlay">
+        <div class="tour-spotlight" id="tourSpotlight"></div>
+        <div class="tour-card" id="tourCard">
+            <div class="tour-step-indicator" id="tourStepIndicator"></div>
+            <div class="tour-title" id="tourTitle"></div>
+            <div class="tour-body" id="tourBody"></div>
+            <div class="tour-actions">
+                <button class="tour-btn tour-btn-skip" id="tourSkipBtn">Skip Tour</button>
+                <div class="tour-actions-right">
+                    <button class="tour-btn tour-btn-back" id="tourBackBtn">Back</button>
+                    <button class="tour-btn tour-btn-next" id="tourNextBtn">Next</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main container -->
+    <main class="container">
+        <!-- Editor section -->
+        <section class="editor-section" id="editorSection">
+            <div class="panel-head">
+                <div class="panel-title">Source Playground</div>
+                <div class="panel-meta">Monaco Editor</div>
+            </div>
+            <div id="editor"><div style="display:flex;align-items:center;justify-content:center;height:100%;color:#9db0d0;font-size:14px;font-family:'IBM Plex Mono',monospace;">Loading editor...</div></div>
+        </section>
+
+        <!-- Drag-to-resize handle -->
+        <div id="panelResizer" class="panel-resizer">
+            <button id="resizerCollapseBtn" class="resizer-collapse-btn" title="Collapse / expand editor">&#x276E;</button>
+        </div>
+
+        <!-- Visualization section -->
+        <section class="visualization-section">
+            <div class="panel-head viz-panel-head">
+                <div class="panel-title">Execution Atlas</div>
+                <div class="panel-meta">Interactive 3D CFG</div>
+            </div>
+            <div class="viz-overview">
+                <span class="viz-pill">3D Graph</span>
+                <span class="viz-pill">Branch + Loop Detection</span>
+                <span class="viz-pill">Unused Function Insights</span>
+            </div>
+            <canvas id="three-canvas"></canvas>
+            <div class="legend collapsed" id="legendPanel">
+                <button class="legend-toggle" id="legendToggle" title="Toggle legend">Legend ▸</button>
+                <div class="legend-body">
+                    <div class="legend-title">Node Types</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#10b981"></span>START</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#38bdf8"></span>Function / Method</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#818cf8"></span>Class / Struct</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#f43f5e"></span>Unused Function ⚠️</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#ff6b6b"></span>Recursive Call ↻</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>If / Else / Switch</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span>Case / Default</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#a855f7"></span>Loop</div>
+                    <div class="legend-item"><span class="legend-dot legend-dot-glow" style="background:#a855f7"></span>&#x221e; Infinite Loop</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#fb923c"></span>Break</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#34d399"></span>Continue</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#06b6d4"></span>Call</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#ef4444"></span>Return / Throw</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#f97316"></span>Try / Catch / Except</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#fbbf24"></span>Finally</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#60a5fa"></span>With (context mgr)</div>
+                    <div class="legend-item"><span class="legend-dot" style="background:#94a3b8"></span>Other</div>
+                    <div class="legend-divider"></div>
+                    <div class="legend-title">Edges</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#ffffff"></span>Flow</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#22c55e"></span>Loop back</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#f59e0b"></span>Conditional</div>
+                    <div class="legend-item"><span class="legend-line" style="background:#06b6d4"></span>Call (inter-func)</div>
+                </div>
+            </div>
+            <!-- Unused functions warning panel — hidden until backend reports unused functions -->
+            <div id="unusedPanel" class="unused-panel">
+                <div class="unused-header">
+                    <span>⚠️ Unused Functions</span>
+                    <span class="unused-badge" id="unusedCount">0</span>
+                </div>
+                <div class="unused-desc">Defined but never called — dead code. Nodes pulse red in the graph. Click a name to zoom to its node.</div>
+                <div id="unusedList" class="unused-list"></div>
+            </div>
+
+            <!-- Recursion detection panel — hidden until backend detects recursion -->
+            <div id="recursionPanel" class="unused-panel recursion-panel">
+                <div class="unused-header" style="border-left-color: #ff6b6b;">
+                    <span>↻ Recursion Detected</span>
+                    <span class="unused-badge" style="background: #ff6b6b;" id="recursionCount">0</span>
+                </div>
+                <div class="unused-desc">Functions that call themselves (direct) or each other (mutual). Recursive call nodes glow red-pink in the graph.</div>
+                <div id="recursionList" class="unused-list"></div>
+            </div>
+
+            <!-- Loop info popup — shown when user clicks a loop node -->
+            <div id="loopPopup" class="loop-popup">
+                <div class="loop-popup-header">
+                    <span id="loopPopupTitle" class="loop-popup-title">loop</span>
+                    <span id="loopPopupInfinite" class="loop-popup-inf-badge">&#x221e; Infinite</span>
+                    <button id="loopPopupClose" class="loop-popup-close">&#x2715;</button>
+                </div>
+                <div class="loop-popup-body">
+                    <div class="loop-popup-row">
+                        <span class="loop-popup-label">Type</span>
+                        <span id="loopPopupType" class="loop-popup-value">&mdash;</span>
+                    </div>
+                    <div class="loop-popup-row">
+                        <span class="loop-popup-label">Condition</span>
+                        <span id="loopPopupCondition" class="loop-popup-value">&mdash;</span>
+                    </div>
+                    <div class="loop-popup-row">
+                        <span class="loop-popup-label">Line</span>
+                        <span id="loopPopupLine" class="loop-popup-value">&mdash;</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Mobile tab bar — only visible on small screens -->
+        <div class="mobile-tab-bar" id="mobileTabBar">
+            <button class="mobile-tab active" id="tabEditorBtn" data-tab="editor">
+                <span class="mobile-tab-icon">✏️</span>
+                <span>Editor</span>
+            </button>
+            <button class="mobile-tab" id="tabGraphBtn" data-tab="graph">
+                <span class="mobile-tab-icon">🗺️</span>
+                <span>Graph</span>
+            </button>
+        </div>
+    </main>
+
+    <!-- Auth modal — shown when no API key is stored -->
+    <div id="authModal" class="auth-modal">
+        <div class="auth-container" id="authContainer">
+            <!-- Login form (right side) -->
+            <div class="auth-form-box auth-form-login">
+                <div id="loginForm">
+                    <h1>Sign In</h1>
+                    <div class="auth-brand-sub">Access your 3D execution atlas</div>
+                    <div class="auth-input-box">
+                        <input id="loginEmail" class="auth-input" type="email" placeholder="Email" autocomplete="email" />
+                        <i class='bx bxs-envelope'></i>
+                    </div>
+                    <div class="auth-input-box">
+                        <input id="loginPassword" class="auth-input" type="password" placeholder="Password" autocomplete="current-password" />
+                        <i class='bx bxs-lock-alt'></i>
+                    </div>
+                    <button id="loginSubmitBtn" class="auth-submit-btn">Sign In</button>
+                    <div id="loginError" class="auth-error"></div>
+                    <div class="auth-alt-key">
+                        Already have an API key?
+                        <a href="#" id="useKeyLink">Enter it manually</a>
+                    </div>
+                    <div id="manualKeySection" class="auth-manual-key auth-form-hidden">
+                        <div class="auth-input-box">
+                            <input id="manualKeyInput" class="auth-input" type="password" placeholder="cf_live_..." autocomplete="off" />
+                            <i class='bx bxs-key'></i>
+                        </div>
+                        <button id="manualKeySubmit" class="auth-submit-btn">Use This Key</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Register form (right side, hidden until toggle) -->
+            <div class="auth-form-box auth-form-register">
+                <div id="registerForm">
+                    <h1>Create Account</h1>
+                    <div class="auth-brand-sub">Start visualizing your code in 3D</div>
+                    <div class="auth-input-box">
+                        <input id="regUsername" class="auth-input" type="text" placeholder="Username" autocomplete="username" />
+                        <i class='bx bxs-user'></i>
+                    </div>
+                    <div class="auth-input-box">
+                        <input id="regEmail" class="auth-input" type="email" placeholder="Email" autocomplete="email" />
+                        <i class='bx bxs-envelope'></i>
+                    </div>
+                    <div class="auth-input-box">
+                        <input id="regPassword" class="auth-input" type="password" placeholder="Password (8+ characters)" autocomplete="new-password" />
+                        <i class='bx bxs-lock-alt'></i>
+                    </div>
+                    <button id="registerSubmitBtn" class="auth-submit-btn">Create Account</button>
+                    <div id="registerError" class="auth-error"></div>
+                </div>
+            </div>
+
+            <!-- Sliding toggle overlay -->
+            <div class="auth-toggle-box">
+                <div class="auth-toggle-panel auth-toggle-left">
+                    <h1>Hello, Welcome!</h1>
+                    <p>Don't have an account?</p>
+                    <button class="auth-toggle-btn" id="registerTabBtn">Create Account</button>
+                </div>
+                <div class="auth-toggle-panel auth-toggle-right">
+                    <h1>Welcome Back!</h1>
+                    <p>Already have an account?</p>
+                    <button class="auth-toggle-btn" id="loginTabBtn">Sign In</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel overlay (click to close) -->
+    <div id="panelOverlay" class="panel-overlay"></div>
+
+    <!-- Graphs side panel -->
+    <div id="graphsPanel" class="side-panel">
+        <div class="side-panel-header">
+            <span>My Saved Graphs</span>
+            <button id="closeGraphsBtn" class="panel-close-btn">✕</button>
+        </div>
+        <div id="graphsList" class="graphs-list">
+            <div class="graphs-empty">No saved graphs yet. Generate a graph and click 💾 Save.</div>
+        </div>
+    </div>
+
+    <!-- Settings side panel -->
+    <div id="settingsPanel" class="side-panel">
+        <div class="side-panel-header">
+            <span>Settings</span>
+            <button id="closeSettingsBtn" class="panel-close-btn">✕</button>
+        </div>
+        <div class="settings-section settings-user-section">
+            <div id="settingsUsername" class="settings-username">—</div>
+            <button id="signOutBtn" class="settings-btn settings-btn-ghost settings-signout-btn">Sign Out</button>
+        </div>
+        <div class="settings-section">
+            <div class="settings-label">Your Plan</div>
+            <div id="subscriptionInfo"></div>
+        </div>
+        <div class="settings-section" id="upgradeSection">
+        </div>
+        <div class="settings-section">
+            <div class="settings-label">Your API Keys</div>
+            <div id="apiKeysList" class="api-keys-list"></div>
+            <div class="settings-create-key">
+                <input id="newKeyName" class="settings-input" placeholder="Key name (e.g. My App)" />
+                <button id="createKeyBtn" class="settings-btn">Create Key</button>
+            </div>
+            <div id="newKeyDisplay" class="new-key-display"></div>
+            <button id="saveKeyFileBtn" class="settings-btn settings-btn-ghost" style="display:none;margin-top:6px;width:100%">💾 Save Key to File</button>
+        </div>
+    </div>
+
+    <!-- Save graph inline form -->
+    <div id="saveForm" class="save-form">
+        <div class="save-form-title">Save Graph</div>
+        <input id="saveTitleInput" class="settings-input" placeholder="Graph title..." />
+        <input id="saveDescInput" class="settings-input" placeholder="Description (optional)" />
+        <div class="save-form-row">
+            <button id="saveConfirmBtn" class="settings-btn">Save</button>
+            <button id="saveCancelBtn" class="settings-btn settings-btn-ghost">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script type="module" src="src/editor_setup.js"></script>
+    <script type="module" src="src/three_setup.js"></script>
+    <script type="module" src="src/api.js"></script>
+    <script type="module" src="src/main.js"></script>
+</body>
+</html>
