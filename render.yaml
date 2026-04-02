@@ -65,6 +65,7 @@ services:
     region: oregon
     plan: free
     maxmemoryPolicy: allkeys-lru
+    ipAllowList: []  # Allow only Render internal traffic
 
 databases:
 
