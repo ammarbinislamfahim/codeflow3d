@@ -28,6 +28,12 @@ services:
         # Set this to your Netlify URL after deployment, e.g.:
         # https://your-site-name.netlify.app
         value: https://your-site-name.netlify.app
+      - key: ADMIN_EMAIL
+        value: ""  # Set to your email to auto-create admin on startup
+      - key: ADMIN_USERNAME
+        value: ""
+      - key: ADMIN_PASSWORD
+        value: ""
 
   # ── Redis ────────────────────────────────────────────────────────────────
   - type: redis

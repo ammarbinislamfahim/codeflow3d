@@ -69,6 +69,14 @@ async def lifespan(app):
     # Create tables if they don't exist
     init_db()
     logger.info("Database tables ensured")
+    # Auto-seed admin user if ADMIN_EMAIL is set (for hosts without shell access)
+    if os.getenv("ADMIN_EMAIL"):
+        try:
+            from seed_admin import seed
+            seed()
+            logger.info("Admin seed check completed")
+        except Exception as e:
+            logger.warning(f"Admin seed failed: {e}")
     try:
         start_http_server(9100)
         logger.info("Prometheus metrics on :9100")
