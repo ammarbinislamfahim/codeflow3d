@@ -440,6 +440,7 @@ async def analyze(
 
             # --- Async path: dispatch large analyses to Celery ---
             if len(analyze_request.code) >= ASYNC_THRESHOLD:
+              try:
                 from celery_tasks import analyze_code_task
 
                 # Pre-create Analysis row so it counts toward rate limits immediately
@@ -483,6 +484,8 @@ async def analyze(
                     status="pending",
                     cached=False,
                 )
+              except Exception as _celery_err:
+                logger.warning("Celery unavailable, falling back to sync: %s", _celery_err)
 
             # --- Sync path: parse small code inline for instant results ---
             if analyze_request.language == "python":
