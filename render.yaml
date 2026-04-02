@@ -6,12 +6,11 @@ services:
   # ── FastAPI Backend ──────────────────────────────────────────────────────
   - type: web
     name: codeflow3d-backend
-    runtime: python
+    runtime: docker
     region: oregon
     plan: free
     rootDir: backend
-    buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /ping
     envVars:
       - key: DATABASE_URL
@@ -29,8 +28,6 @@ services:
         # Set this to your Netlify URL after deployment, e.g.:
         # https://your-site-name.netlify.app
         value: https://your-site-name.netlify.app
-      - key: PYTHON_VERSION
-        value: "3.11.0"
 
   # ── Redis ────────────────────────────────────────────────────────────────
   - type: redis
