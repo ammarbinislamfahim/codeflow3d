@@ -20,9 +20,10 @@ def seed():
             print(f"User '{existing.username}' already exists — promoted to admin.")
             return
 
-        user = User(
-            username=ADMIN_USERNAME,
-            email=ADMIN_EMAIL,
+        try:
+            user = User(
+                username=ADMIN_USERNAME,
+                email=ADMIN_EMAIL,
             password_hash=hash_password(ADMIN_PASSWORD),
             is_active=True,
             is_admin=True,
@@ -49,6 +50,9 @@ def seed():
         print("=" * 50)
         print("Store the API key — it will not be shown again.")
         print("Change your password after first login.")
+        except Exception:
+            db.rollback()
+            print(f"Admin already exists (concurrent creation) — skipping.")
     finally:
         db.close()
 

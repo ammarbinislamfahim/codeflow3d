@@ -10,7 +10,7 @@ from typing import Optional
 
 _BCRYPT_ROUNDS = 12
 
-JWT_SECRET = os.getenv("JWT_SECRET", "")
+JWT_SECRET = os.getenv("JWT_SECRET") or os.getenv("SECRET_KEY", "")
 _KNOWN_INSECURE_SECRETS = {
     "",
     "change-in-production-min-32-chars",
