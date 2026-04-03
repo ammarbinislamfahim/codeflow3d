@@ -109,11 +109,12 @@ The default `render.yaml` is configured for **Render's free tier**. It deploys:
 
 1. In [Render](https://render.com), click **New → Blueprint**.
 2. Connect your GitHub repo — Render auto-detects `render.yaml`.
-3. Set `ALLOWED_ORIGINS` env var on the web service to your Netlify URL.
-4. After deploy, run the seed script via Render Shell:
-   ```bash
-   python seed_admin.py
-   ```
+3. Set these environment variables on the **codeflow3d-backend** web service:
+   - `ALLOWED_ORIGINS` = your Netlify URL (e.g. `https://your-site.netlify.app`)
+   - `ADMIN_EMAIL` = your admin email
+   - `ADMIN_USERNAME` = your admin username
+   - `ADMIN_PASSWORD` = a strong password (min 8 characters)
+4. Deploy. The admin user is **created automatically** on first startup — no shell access needed.
 
 ### Backend → Render (Paid Tier)
 
