@@ -1,5 +1,15 @@
 # Render Blueprint — deploys all CodeFlow3D backend services in one click
 # Docs: https://render.com/docs/blueprint-spec
+#
+# ╔═══════════════════════════════════════════════════════════════════════╗
+# ║  DEFAULT: Free Tier Setup                                           ║
+# ║  All services use plan: free. No Celery worker is deployed.         ║
+# ║  Code analysis runs synchronously in the web process.               ║
+# ║                                                                     ║
+# ║  PAID TIER: To enable async Celery workers and use paid plans:      ║
+# ║  1. Change all "plan: free" to your plan (e.g. starter, standard)   ║
+# ║  2. Uncomment the "Celery Worker (Paid Tier)" section below         ║
+# ╚═══════════════════════════════════════════════════════════════════════╝
 
 services:
 
@@ -8,7 +18,7 @@ services:
     name: codeflow3d-backend
     runtime: docker
     region: oregon
-    plan: free
+    plan: free                # Change to "starter" or "standard" for paid tier
     rootDir: backend
     dockerfilePath: ./Dockerfile
     healthCheckPath: /ping
@@ -39,15 +49,42 @@ services:
   - type: redis
     name: codeflow3d-redis
     region: oregon
-    plan: free
+    plan: free                # Change to "starter" or "standard" for paid tier
     maxmemoryPolicy: allkeys-lru
     ipAllowList: []  # Allow only Render internal traffic
+
+  # ╔═══════════════════════════════════════════════════════════════════════╗
+  # ║  PAID TIER ONLY — Celery Worker                                     ║
+  # ║  Uncomment the section below if you are on a paid Render plan.      ║
+  # ║  This enables async code analysis via Celery + Redis.               ║
+  # ╚═══════════════════════════════════════════════════════════════════════╝
+
+  # - type: worker
+  #   name: codeflow3d-worker
+  #   runtime: docker
+  #   region: oregon
+  #   plan: starter             # Use starter, standard, or pro
+  #   rootDir: backend
+  #   dockerfilePath: ./Dockerfile
+  #   dockerCommand: celery -A celery_tasks worker --loglevel=info --concurrency=4
+  #   envVars:
+  #     - key: DATABASE_URL
+  #       fromDatabase:
+  #         name: codeflow3d-db
+  #         property: connectionString
+  #     - key: REDIS_URL
+  #       fromService:
+  #         name: codeflow3d-redis
+  #         type: redis
+  #         property: connectionString
+  #     - key: SECRET_KEY
+  #       generateValue: true
 
 databases:
 
   # ── PostgreSQL ───────────────────────────────────────────────────────────
   - name: codeflow3d-db
     region: oregon
-    plan: free
+    plan: free                # Change to "starter" or "standard" for paid tier
     databaseName: codeflow_db
     user: codeflow

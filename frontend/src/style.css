@@ -963,6 +963,8 @@ body::after {
         flex: 1;
         min-height: 0;
         display: flex;
+        width: 100% !important;
+        max-width: 100% !important;
     }
 
     body[data-mobile-tab="editor"] .visualization-section {
@@ -984,10 +986,18 @@ body::after {
         flex: 1;
         min-height: 0;
         display: flex;
+        width: 100% !important;
+        max-width: 100% !important;
     }
 
     body:not([data-mobile-tab]) .visualization-section {
         display: none;
+    }
+
+    /* Editor section: override desktop width constraints on mobile */
+    .editor-section {
+        width: 100% !important;
+        max-width: 100% !important;
     }
 
     /* Legend and unused panel: static below canvas on graph tab */

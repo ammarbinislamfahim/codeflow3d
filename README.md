@@ -95,20 +95,35 @@ docker-compose exec backend python seed_admin.py
    - `VITE_API_URL` = your Render backend URL (e.g. `https://codeflow3d-backend.onrender.com`)
 5. Deploy.
 
-### Backend → Render
+### Backend → Render (Free Tier — Default)
+
+The default `render.yaml` is configured for **Render's free tier**. It deploys:
+
+- **Web Service** — FastAPI backend (handles code parsing synchronously)
+- **Redis** — Cache
+- **PostgreSQL** — Database
+
+> **Note:** No Celery worker is deployed on the free tier. Code analysis runs synchronously
+> inside the web process. For large codebases (>10K characters), this may be slower but works
+> without a separate worker service.
 
 1. In [Render](https://render.com), click **New → Blueprint**.
 2. Connect your GitHub repo — Render auto-detects `render.yaml`.
-3. This creates:
-   - **Web Service** — FastAPI backend
-   - **Worker** — Celery worker
-   - **Redis** — Cache + message broker
-   - **PostgreSQL** — Database
-4. Set `ALLOWED_ORIGINS` env var on the web service to your Netlify URL.
-5. After deploy, run the seed script via Render Shell:
+3. Set `ALLOWED_ORIGINS` env var on the web service to your Netlify URL.
+4. After deploy, run the seed script via Render Shell:
    ```bash
    python seed_admin.py
    ```
+
+### Backend → Render (Paid Tier)
+
+If you're on a **paid Render plan**, you can enable Celery workers for async processing:
+
+1. Open `render.yaml` and follow the comments inside — uncomment the **Celery Worker**
+   service section and switch all `plan: free` entries to your desired plan (e.g. `starter`, `standard`).
+2. Deploy via Render Blueprint as above.
+3. With the worker enabled, large code analysis runs asynchronously via Celery + Redis,
+   keeping the web process responsive.
 
 ---
 

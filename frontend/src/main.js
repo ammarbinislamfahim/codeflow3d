@@ -1411,7 +1411,8 @@ const TOUR_STEPS = [
         target: "#editor",
         title: "① Write or Paste Code",
         body: "This is the <strong>code editor</strong> (powered by Monaco — same as VS Code). Paste your code here, or write from scratch. It supports syntax highlighting for all supported languages.",
-        position: "right"
+        position: "right",
+        mobileTab: "editor"
     },
     {
         target: "#language",
@@ -1428,8 +1429,11 @@ const TOUR_STEPS = [
     {
         target: "#three-canvas",
         title: "④ Explore the 3D Graph",
-        body: "Your code's flow appears here as an interactive 3D graph.<br><br><strong>Controls:</strong><br>• <kbd>Left-click drag</kbd> — Pan the view<br>• <kbd>Scroll</kbd> — Zoom in/out<br>• <kbd>Right-click drag</kbd> — Rotate<br>• <kbd>Click a node</kbd> — Zoom to it & jump to source line<br>• <kbd>Drag a node</kbd> — Reposition it",
-        position: "left"
+        body: window.innerWidth <= 700
+            ? "Your code's flow appears here as an interactive 3D graph.<br><br><strong>Controls:</strong><br>• <kbd>One-finger drag</kbd> — Pan the view<br>• <kbd>Pinch</kbd> — Zoom in/out<br>• <kbd>Two-finger drag</kbd> — Rotate<br>• <kbd>Tap a node</kbd> — Zoom to it & jump to source line<br>• <kbd>Long-press & drag a node</kbd> — Reposition it"
+            : "Your code's flow appears here as an interactive 3D graph.<br><br><strong>Controls:</strong><br>• <kbd>Left-click drag</kbd> — Pan the view<br>• <kbd>Scroll</kbd> — Zoom in/out<br>• <kbd>Right-click drag</kbd> — Rotate<br>• <kbd>Click a node</kbd> — Zoom to it & jump to source line<br>• <kbd>Drag a node</kbd> — Reposition it",
+        position: window.innerWidth <= 700 ? "center" : "left",
+        mobileTab: "graph"
     },
     {
         target: "#findStartBtn",
@@ -1447,7 +1451,8 @@ const TOUR_STEPS = [
         target: "#legendToggle",
         title: "⑦ Node Legend",
         body: "Click <strong>Legend</strong> to see what each node color means — green for START, blue for functions, purple for loops, amber for conditionals, red for returns, and more.",
-        position: "left"
+        position: "left",
+        mobileTab: "graph"
     },
     {
         target: "#settingsBtn",
@@ -1491,12 +1496,29 @@ function _renderTourStep() {
     }).join("");
 
     _tourTitle.textContent = step.title;
-    _tourBody.innerHTML = step.body;
+    // On mobile, regenerate body text for steps that have dynamic content
+    if (typeof step.body === "function") {
+        _tourBody.innerHTML = step.body();
+    } else {
+        _tourBody.innerHTML = step.body;
+    }
 
     // Button labels
     _tourBackBtn.style.display = _tourStep === 0 ? "none" : "";
     _tourNextBtn.textContent = _tourStep === totalSteps - 1 ? "Get Started" : "Next";
     _tourSkipBtn.style.display = _tourStep === totalSteps - 1 ? "none" : "";
+
+    // On mobile, switch to the correct tab so the target element is visible
+    if (window.innerWidth <= 700 && step.mobileTab) {
+        const tabEditor = document.getElementById("tabEditorBtn");
+        const tabGraph  = document.getElementById("tabGraphBtn");
+        document.body.setAttribute("data-mobile-tab", step.mobileTab);
+        if (tabEditor) tabEditor.classList.toggle("active", step.mobileTab === "editor");
+        if (tabGraph)  tabGraph.classList.toggle("active",  step.mobileTab === "graph");
+        if (step.mobileTab === "graph") {
+            setTimeout(threeResize, 50);
+        }
+    }
 
     // Spotlight + card positioning
     const target = step.target ? document.querySelector(step.target) : null;
