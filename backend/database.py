@@ -90,7 +90,7 @@ class APIKey(Base):
     revoked_at = Column(DateTime)
 
     user = relationship("User", back_populates="api_keys")
-    analyses = relationship("Analysis", back_populates="api_key")
+    analyses = relationship("Analysis", back_populates="api_key", passive_deletes=True)
 
     def is_valid(self) -> bool:
         return self.revoked_at is None
