@@ -35,9 +35,12 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOWED_ORIGINS
-        # Set this to your Netlify URL after deployment, e.g.:
-        # https://your-site-name.netlify.app
-        value: https://your-site-name.netlify.app
+        # Your Netlify URL (no trailing slash). Use * to allow all origins.
+        # Examples:
+        #   https://codeflow3d.netlify.app
+        #   https://my-site.netlify.app,http://localhost:5500
+        #   *
+        value: "*"
       - key: ADMIN_EMAIL
         value: ""  # Set to your email to auto-create admin on startup
       - key: ADMIN_USERNAME

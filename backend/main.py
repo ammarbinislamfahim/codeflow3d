@@ -45,17 +45,40 @@ CACHE_HITS = Counter('codeflow_cache_hits_total', 'Cache hits')
 ANALYSIS_TIME = Summary('codeflow_analysis_seconds', 'Analysis time')
 
 # Config
-ALLOWED_ORIGINS = [
-    o.strip() for o in
-    os.getenv("ALLOWED_ORIGINS", "http://localhost:5500").split(",")
-    if o.strip()
-]
+def _parse_origins(raw: str) -> list[str]:
+    """Parse ALLOWED_ORIGINS env var with robust normalization.
+
+    Handles common mistakes:
+      - trailing slashes, extra spaces/quotes
+      - missing protocol (bare domain → https://)
+      - "*" wildcard to allow every origin
+    """
+    origins = []
+    for o in raw.split(","):
+        o = o.strip().strip('"').strip("'").rstrip("/")
+        if not o:
+            continue
+        if o == "*":
+            return ["*"]       # FastAPI CORSMiddleware treats ["*"] as wildcard
+        # If someone pastes "example.netlify.app" without protocol, assume https
+        if not o.startswith("http://") and not o.startswith("https://"):
+            o = f"https://{o}"
+        origins.append(o)
+    return origins
+
+ALLOWED_ORIGINS = _parse_origins(
+    os.getenv("ALLOWED_ORIGINS", "http://localhost:5500")
+)
+# When "*" is in the list, credentials must be disabled (browser requirement)
+_allow_credentials = "*" not in ALLOWED_ORIGINS
+
 MAX_CODE_SIZE = 50_000
 MAX_LOOPS = 150
 ASYNC_THRESHOLD = 10_000  # Code larger than this (chars) is dispatched to Celery
 
 logger.info("🚀 CodeFlow3D Backend Starting")
 logger.info("Allowed origins: %s", ALLOWED_ORIGINS)
+logger.info("Allow credentials: %s", _allow_credentials)
 
 
 @asynccontextmanager
@@ -99,7 +122,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -287,6 +310,18 @@ def check_plan_limits(user: User, db: Session):
 async def ping():
     REQUESTS_TOTAL.labels(endpoint="ping", status="success").inc()
     return {"status": "pong"}
+
+
+@app.get("/debug/cors")
+async def debug_cors(request: Request):
+    """Diagnostic endpoint – returns CORS config so you can verify origins."""
+    origin = request.headers.get("origin", "(no origin header)")
+    return {
+        "allowed_origins": ALLOWED_ORIGINS,
+        "allow_credentials": _allow_credentials,
+        "request_origin": origin,
+        "origin_match": origin in ALLOWED_ORIGINS or "*" in ALLOWED_ORIGINS,
+    }
 
 
 @app.get("/")
