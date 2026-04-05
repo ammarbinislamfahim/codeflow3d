@@ -395,4 +395,5 @@ if errors:
 else:
     print("\n  ALL TESTS PASSED!")
 
-sys.exit(1 if errors else 0)
+if __name__ == "__main__":
+    sys.exit(1 if errors else 0)

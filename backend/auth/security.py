@@ -4,7 +4,7 @@ import bcrypt
 import hashlib
 import secrets
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 from typing import Optional
 
@@ -29,10 +29,27 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 24
 
 
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt"""
+def validate_password_strength(password: str) -> list[str]:
+    """Return list of failed password rules. Empty list = strong password."""
+    failures = []
     if len(password) < 8:
-        raise ValueError("Password must be at least 8 characters")
+        failures.append("At least 8 characters")
+    if not any(c.isupper() for c in password):
+        failures.append("At least one uppercase letter")
+    if not any(c.islower() for c in password):
+        failures.append("At least one lowercase letter")
+    if not any(c.isdigit() for c in password):
+        failures.append("At least one number")
+    if not any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?/~`' for c in password):
+        failures.append("At least one special character (!@#$%^&*...)")
+    return failures
+
+
+def hash_password(password: str) -> str:
+    """Hash password using bcrypt after strength check"""
+    failures = validate_password_strength(password)
+    if failures:
+        raise ValueError("Weak password: " + "; ".join(failures))
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=_BCRYPT_ROUNDS)).decode("utf-8")
 
 
@@ -72,12 +89,12 @@ def create_access_token(
     if expires_delta is None:
         expires_delta = timedelta(hours=JWT_EXPIRATION_HOURS)
 
-    expire = datetime.utcnow() + expires_delta
+    expire = datetime.now(timezone.utc) + expires_delta
 
     payload = {
         "sub": str(user_id),
         "exp": expire,
-        "iat": datetime.utcnow()
+        "iat": datetime.now(timezone.utc)
     }
 
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)

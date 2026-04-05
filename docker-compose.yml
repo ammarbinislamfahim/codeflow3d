@@ -5,7 +5,7 @@ services:
     container_name: codeflow_postgres
     environment:
       POSTGRES_USER: codeflow
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       POSTGRES_DB: codeflow_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -48,9 +48,9 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:-password}@postgres:5432/codeflow_db
+      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/codeflow_db
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: ${JWT_SECRET:-codeflow3d-dev-secret-key-min32chars!!}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env (min 32 chars)}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5500}
       ENVIRONMENT: development
     depends_on:
@@ -77,7 +77,7 @@ services:
     working_dir: /app
     command: celery -A celery_tasks worker --loglevel=info --concurrency=4
     environment:
-      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:-password}@postgres:5432/codeflow_db
+      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/codeflow_db
       REDIS_URL: redis://redis:6379/0
     depends_on:
       - postgres
@@ -102,7 +102,7 @@ services:
     working_dir: /app
     command: celery -A celery_tasks beat --loglevel=info
     environment:
-      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:-password}@postgres:5432/codeflow_db
+      DATABASE_URL: postgresql://codeflow:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/codeflow_db
       REDIS_URL: redis://redis:6379/0
     depends_on:
       - postgres
@@ -156,7 +156,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_ADMIN_PASSWORD:-ChangeMe!Grafana2024}
       GF_USERS_ALLOW_SIGN_UP: 'false'
     volumes:
       - grafana_data:/var/lib/grafana

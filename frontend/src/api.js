@@ -246,7 +246,15 @@ async function authPost(path, body) {
         body: JSON.stringify(body),
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+    if (!res.ok) {
+        let msg = `Error ${res.status}`;
+        if (typeof data.detail === 'string') {
+            msg = data.detail;
+        } else if (Array.isArray(data.detail)) {
+            msg = data.detail.map(e => e.msg || JSON.stringify(e)).join('; ');
+        }
+        throw new Error(msg);
+    }
     return data;
 }
 
@@ -256,12 +264,20 @@ export async function exchangeTokenForKey(jwt) {
         headers: { 'Authorization': `Bearer ${jwt}` },
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || `Error ${res.status}`);
+    if (!res.ok) {
+        let msg = `Error ${res.status}`;
+        if (typeof data.detail === 'string') {
+            msg = data.detail;
+        } else if (Array.isArray(data.detail)) {
+            msg = data.detail.map(e => e.msg || JSON.stringify(e)).join('; ');
+        }
+        throw new Error(msg);
+    }
     return data; // { api_key, username }
 }
 
-export async function loginUser(email, password) {
-    const { access_token, username } = await authPost('/login', { email, password });
+export async function loginUser(login, password) {
+    const { access_token, username } = await authPost('/login', { login, password });
     const { api_key } = await exchangeTokenForKey(access_token);
     return { api_key, username };
 }

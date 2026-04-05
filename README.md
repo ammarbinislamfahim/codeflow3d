@@ -1,6 +1,6 @@
 # CodeFlow3D — 3D Control Flow Visualization
 
-Analyze source code and generate interactive 3D control flow graphs. Supports **C, C++, Python, Java, and JavaScript**.
+Analyze source code and generate interactive 3D control flow graphs. Supports **C, C++, Python, Java, JavaScript, and TypeScript**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
@@ -8,14 +8,16 @@ Analyze source code and generate interactive 3D control flow graphs. Supports **
 
 ## Features
 
-- **Multi-language** — C, C++, Python, Java, JavaScript parsers (tree-sitter + javalang)
+- **Multi-language** — C, C++, Python, Java, JavaScript, TypeScript parsers (tree-sitter + javalang + pycparser)
 - **3D Visualization** — Interactive Three.js scene with orbit controls, zoom, and SVG export
-- **Async Processing** — Celery workers for heavy analyses
+- **Smart Analysis** — Loop detection with metadata, recursion detection (direct & mutual), break/continue tracking
+- **Async Processing** — Celery workers for heavy analyses (paid tier)
 - **Caching** — Redis-powered result caching
-- **Auth & Rate Limiting** — API-key authentication, per-user rate limits, admin panel
+- **Auth & Security** — API-key auth, JWT login (email or username), password strength enforcement, rate limiting
 - **Subscription Tiers** — Free / Pro / Enterprise plan support
+- **Admin Panel** — Full user management, subscription control, site settings (mobile-responsive)
 - **Monitoring** — Prometheus metrics + Grafana dashboards
-- **Production-ready** — Dockerized, health checks, CORS, security headers
+- **Production-ready** — Dockerized, health checks, CORS, security headers, input validation
 
 ---
 
@@ -24,7 +26,7 @@ Analyze source code and generate interactive 3D control flow graphs. Supports **
 | Layer | Tech |
 |-------|------|
 | Frontend | Vite, Three.js, Monaco Editor |
-| Backend | Python, FastAPI, tree-sitter, javalang |
+| Backend | Python, FastAPI, tree-sitter, pycparser, javalang |
 | Queue | Celery + Redis |
 | Database | PostgreSQL |
 | Monitoring | Prometheus, Grafana |
@@ -63,19 +65,28 @@ Analyze source code and generate interactive 3D control flow graphs. Supports **
 git clone https://github.com/fahim2089/CodeFlow3D.git
 cd CodeFlow3D
 
-# Configure environment
-cp .env.example .env
-# Edit .env with your database password and secret key
+# Create .env file (required)
+cat > .env << 'EOF'
+DB_PASSWORD=MySecureDbPass123!
+JWT_SECRET=my-super-secret-jwt-key-min-32-chars!!
+ADMIN_EMAIL=admin@yourdomain.com
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=Admin@1234
+EOF
 
 # Start everything
 docker-compose up -d
 
-# Seed admin user
-docker-compose exec backend python seed_admin.py
+# The admin user is created automatically on first startup.
+# Check logs for the admin API key:
+docker-compose logs backend | grep "API Key"
 ```
+
+> **Password requirements:** Minimum 8 characters, at least one uppercase letter, one lowercase letter, one number, and one special character.
 
 - **Frontend** → http://localhost:5500
 - **Backend API** → http://localhost:8000
+- **API Docs** → http://localhost:8000/docs
 - **Prometheus** → http://localhost:9090
 - **Grafana** → http://localhost:3000
 
@@ -113,7 +124,7 @@ The default `render.yaml` is configured for **Render's free tier**. It deploys:
    - `ALLOWED_ORIGINS` = your Netlify URL (e.g. `https://your-site.netlify.app`)
    - `ADMIN_EMAIL` = your admin email
    - `ADMIN_USERNAME` = your admin username
-   - `ADMIN_PASSWORD` = a strong password (min 8 characters)
+   - `ADMIN_PASSWORD` = a strong password (min 8 chars, uppercase, lowercase, number, special character)
 4. Deploy. The admin user is **created automatically** on first startup — no shell access needed.
 
 ### Backend → Render (Paid Tier)
@@ -130,38 +141,98 @@ If you're on a **paid Render plan**, you can enable Celery workers for async pro
 
 ## Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host/db` |
-| `REDIS_URL` | Redis connection string | `redis://host:6379/0` |
-| `SECRET_KEY` | JWT signing key | *(random string)* |
-| `ALLOWED_ORIGINS` | CORS allowed origins | `https://your-site.netlify.app` |
-| `VITE_API_URL` | Backend URL (frontend build) | `https://codeflow3d-backend.onrender.com` |
+| Variable | Description | Required | Example |
+|----------|-------------|----------|---------|
+| `DB_PASSWORD` | PostgreSQL password (Docker) | Yes (Docker) | `MySecureDbPass123!` |
+| `DATABASE_URL` | PostgreSQL connection string (Render) | Auto (Render) | `postgresql://user:pass@host/db` |
+| `REDIS_URL` | Redis connection string | Auto (Render) | `redis://host:6379/0` |
+| `JWT_SECRET` / `SECRET_KEY` | JWT signing key (min 32 chars) | Yes | *(random string)* |
+| `ALLOWED_ORIGINS` | CORS allowed origins | Yes | `https://your-site.netlify.app` |
+| `VITE_API_URL` | Backend URL (frontend build) | Yes (Netlify) | `https://codeflow3d-backend.onrender.com` |
+| `ADMIN_EMAIL` | Auto-create admin on startup | Optional | `admin@yourdomain.com` |
+| `ADMIN_USERNAME` | Admin username | Optional | `admin` |
+| `ADMIN_PASSWORD` | Admin password (must meet strength rules) | Optional | `Admin@1234` |
 
 ---
 
 ## API Endpoints
 
+### Public
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/ping` | Health check |
-| `POST` | `/analyze` | Parse code → CFG JSON |
-| `POST` | `/auth/register` | Create account |
-| `POST` | `/auth/login` | Get JWT + API key |
-| `GET` | `/auth/me` | Current user info |
-| `GET` | `/admin/*` | Admin endpoints (JWT required) |
+| `GET` | `/docs` | Interactive API documentation |
+| `GET` | `/settings/public` | Public site settings (plan prices, contact) |
+
+### Authentication
+
+| Method | Path | Rate Limit | Description |
+|--------|------|------------|-------------|
+| `POST` | `/register` | 5/min | Create account |
+| `POST` | `/login` | 10/min | Login with email or username → JWT |
+| `POST` | `/auth/api-key` | 10/min | Exchange JWT for API key |
+
+### Authenticated (API key required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/analyze` | Parse code → control flow graph JSON (30/min) |
+| `GET` | `/task/{id}` | Poll async analysis task status |
+| `GET` | `/history` | Analysis history |
+| `GET` | `/me` | Current user profile |
+| `GET` | `/me/subscription` | Subscription info & usage |
+| `GET` | `/graphs` | List saved graphs |
+| `POST` | `/graphs` | Save a graph |
+| `GET` | `/graphs/{id}` | Load a saved graph |
+| `DELETE` | `/graphs/{id}` | Delete a saved graph |
+| `GET` | `/api-keys` | List API keys |
+| `POST` | `/api-keys` | Create a new API key |
+| `DELETE` | `/api-keys/{id}` | Revoke an API key |
+
+### Admin (admin API key or JWT required)
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/admin/me` | Verify admin access |
+| `GET` | `/admin/stats` | Dashboard statistics |
+| `GET` | `/admin/users` | List users (paginated, searchable) |
+| `GET` | `/admin/users/{id}` | User detail |
+| `PATCH` | `/admin/users/{id}` | Update user (username, email, active, admin) |
+| `DELETE` | `/admin/users/{id}` | Delete user |
+| `PUT` | `/admin/users/{id}/subscription` | Change user plan |
+| `GET` | `/admin/users/{id}/api-keys` | List user's API keys |
+| `POST` | `/admin/users/{id}/api-keys/reset` | Reset user's API keys |
+| `DELETE` | `/admin/api-keys/{id}` | Revoke specific API key |
+| `GET` | `/admin/settings` | Get site settings |
+| `PUT` | `/admin/settings` | Update site settings |
 
 ---
 
 ## Running Tests
 
 ```bash
-# Parser unit tests
+# Activate the virtual environment first
+source .venv/bin/activate
+
+# Parser unit tests (60 tests across all languages)
 python test_parsers.py
 
 # Website integration tests
 python test_website.py
 ```
+
+---
+
+## Security
+
+- Passwords hashed with **bcrypt** (12 rounds) and enforced strength rules
+- API keys hashed with **SHA-256** — never stored in plaintext
+- JWT tokens (HS256) with 24-hour expiry
+- Rate limiting on all auth endpoints (`/register`, `/login`, `/auth/api-key`)
+- Input validation on all user-facing fields (email, username, code size, graph title)
+- Security headers configured in nginx and Netlify (`X-Frame-Options`, `CSP`, `X-Content-Type-Options`)
+- CORS restricted to configured origins
 
 ---
 

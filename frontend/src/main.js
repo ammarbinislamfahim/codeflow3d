@@ -85,6 +85,67 @@ let sceneReady = false;
 let lastRenderResult = null; // tracks last successfully rendered graph
 
 // ----------------------------
+// Password Strength Checker
+// ----------------------------
+
+const pwRules = {
+    len:     { el: document.getElementById("pwRuleLen"),     test: (p) => p.length >= 8 },
+    upper:   { el: document.getElementById("pwRuleUpper"),   test: (p) => /[A-Z]/.test(p) },
+    lower:   { el: document.getElementById("pwRuleLower"),   test: (p) => /[a-z]/.test(p) },
+    digit:   { el: document.getElementById("pwRuleDigit"),   test: (p) => /\d/.test(p) },
+    special: { el: document.getElementById("pwRuleSpecial"), test: (p) => /[!@#$%^&*()_+\-=\[\]{}|;:,.<>?/~`]/.test(p) },
+};
+const pwStrengthFill = document.getElementById("pwStrengthFill");
+const pwStrengthLabel = document.getElementById("pwStrengthLabel");
+const strengthLabels = ["", "Very Weak", "Weak", "Fair", "Strong", "Very Strong"];
+
+function checkPasswordStrength(password) {
+    let score = 0;
+    for (const key in pwRules) {
+        const rule = pwRules[key];
+        const passed = rule.test(password);
+        if (rule.el) rule.el.classList.toggle("passed", passed);
+        if (passed) score++;
+    }
+    if (pwStrengthFill) pwStrengthFill.setAttribute("data-score", password ? score : 0);
+    if (pwStrengthLabel) {
+        pwStrengthLabel.setAttribute("data-score", password ? score : 0);
+        pwStrengthLabel.textContent = password ? strengthLabels[score] : "";
+    }
+    return score;
+}
+
+if (regPassword) {
+    regPassword.addEventListener("input", () => checkPasswordStrength(regPassword.value));
+}
+
+// ----------------------------
+// Username Validation Checker
+// ----------------------------
+
+const unRules = {
+    len:      { el: document.getElementById("unRuleLen"),      test: (u) => u.length >= 3 && u.length <= 64 },
+    start:    { el: document.getElementById("unRuleStart"),    test: (u) => /^[a-zA-Z]/.test(u) },
+    chars:    { el: document.getElementById("unRuleChars"),    test: (u) => /^[a-zA-Z0-9_\-]+$/.test(u) },
+    noDouble: { el: document.getElementById("unRuleNoDouble"), test: (u) => !/[_\-]{2}/.test(u) },
+};
+
+function checkUsernameRules(username) {
+    let allPassed = true;
+    for (const key in unRules) {
+        const rule = unRules[key];
+        const passed = username.length > 0 ? rule.test(username) : false;
+        if (rule.el) rule.el.classList.toggle("passed", passed);
+        if (!passed) allPassed = false;
+    }
+    return allPassed;
+}
+
+if (regUsername) {
+    regUsername.addEventListener("input", () => checkUsernameRules(regUsername.value.trim()));
+}
+
+// ----------------------------
 // Helper Functions
 // ----------------------------
 
@@ -876,14 +937,14 @@ loginTabBtn.addEventListener("click", () => switchAuthTab("login"));
 registerTabBtn.addEventListener("click", () => switchAuthTab("register"));
 
 loginSubmitBtn.addEventListener("click", async () => {
-    const email = loginEmail.value.trim();
+    const login = loginEmail.value.trim();
     const pass = loginPassword.value;
-    if (!email || !pass) { loginError.textContent = "Fill in all fields."; return; }
+    if (!login || !pass) { loginError.textContent = "Fill in all fields."; return; }
     loginSubmitBtn.disabled = true;
     loginSubmitBtn.textContent = "Signing in...";
     loginError.textContent = "";
     try {
-        const { api_key, username } = await loginUser(email, pass);
+        const { api_key, username } = await loginUser(login, pass);
         setApiKey(api_key);
         localStorage.setItem('cf_username', username);
         hideAuthModal();
@@ -906,6 +967,17 @@ registerSubmitBtn.addEventListener("click", async () => {
     const email = regEmail.value.trim();
     const pass = regPassword.value;
     if (!user || !email || !pass) { registerError.textContent = "Fill in all fields."; return; }
+
+    // Username validation — all rules must pass
+    if (!checkUsernameRules(user)) { registerError.textContent = "Please meet all username requirements."; return; }
+
+    // Email format validation
+    if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(email)) { registerError.textContent = "Please enter a valid email address."; return; }
+
+    // Password strength — all 5 rules must pass
+    const score = checkPasswordStrength(pass);
+    if (score < 5) { registerError.textContent = "Please meet all password requirements."; return; }
+
     registerSubmitBtn.disabled = true;
     registerSubmitBtn.textContent = "Creating account...";
     registerError.textContent = "";
@@ -1096,21 +1168,18 @@ async function refreshApiKeysList() {
     apiKeysList.innerHTML = '<div class="graphs-empty" style="padding:8px 0">Loading...</div>';
     try {
         const data = await listApiKeys();
-        const keys = data.api_keys || [];
+        const keys = (data.api_keys || []).filter(k => k.is_active);
         if (keys.length === 0) {
-            apiKeysList.innerHTML = '<div class="graphs-empty" style="padding:8px 0">No API keys found.</div>';
+            apiKeysList.innerHTML = '<div class="graphs-empty" style="padding:8px 0">No active API keys.</div>';
             return;
         }
         apiKeysList.innerHTML = keys.map(k => `
-            <div class="api-key-item ${k.is_active ? '' : 'api-key-item-revoked'}">
+            <div class="api-key-item">
                 <div class="api-key-item-info">
                     <div class="api-key-item-name">${escapeHtml(k.name || 'Unnamed')}</div>
                     <div class="api-key-item-prefix">${escapeHtml(k.key_prefix)}…</div>
                 </div>
-                ${k.is_active
-                    ? `<button class="api-key-revoke-btn" data-id="${k.id}">Revoke</button>`
-                    : '<span style="font-size:11px;color:#64748b">Revoked</span>'
-                }
+                <button class="api-key-revoke-btn" data-id="${k.id}">Revoke</button>
             </div>
         `).join('');
         apiKeysList.querySelectorAll('.api-key-revoke-btn').forEach(btn => {

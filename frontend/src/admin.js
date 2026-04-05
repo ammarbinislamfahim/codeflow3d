@@ -53,9 +53,9 @@ async function adminFetch(path, opts = {}) {
 
 adminLoginBtn.addEventListener("click", async () => {
     loginError.textContent = "";
-    const email = adminEmail.value.trim();
+    const login = adminEmail.value.trim();
     const pass = adminPassword.value;
-    if (!email || !pass) { loginError.textContent = "Fill in all fields."; return; }
+    if (!login || !pass) { loginError.textContent = "Fill in all fields."; return; }
     adminLoginBtn.disabled = true;
     adminLoginBtn.textContent = "Signing in...";
     try {
@@ -63,7 +63,7 @@ adminLoginBtn.addEventListener("click", async () => {
         const loginRes = await fetch(`${API_BASE}/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email, password: pass }),
+            body: JSON.stringify({ login, password: pass }),
         });
         const loginData = await loginRes.json();
         if (!loginRes.ok) throw new Error(loginData.detail || "Login failed");
@@ -160,13 +160,13 @@ async function loadDashboard() {
 
         const subDiv = document.getElementById("subBreakdown");
         subDiv.innerHTML = Object.entries(stats.subscriptions_by_plan)
-            .map(([plan, count]) => `<div><span>${plan}</span><span>${count}</span></div>`)
+            .map(([plan, count]) => `<div><span>${esc(plan)}</span><span>${Number(count).toLocaleString()}</span></div>`)
             .join("") || "<div><span>No subscriptions yet</span><span></span></div>";
 
         const langDiv = document.getElementById("langBreakdown");
         langDiv.innerHTML = Object.entries(stats.analyses_by_language)
             .sort((a, b) => b[1] - a[1])
-            .map(([lang, count]) => `<div><span>${lang}</span><span>${count.toLocaleString()}</span></div>`)
+            .map(([lang, count]) => `<div><span>${esc(lang)}</span><span>${Number(count).toLocaleString()}</span></div>`)
             .join("") || "<div><span>No analyses yet</span><span></span></div>";
     } catch (err) {
         console.error("Dashboard load failed:", err);
@@ -202,7 +202,7 @@ function renderUsersTable(data) {
             <td>${u.id}</td>
             <td>${esc(u.username)}</td>
             <td>${esc(u.email)}</td>
-            <td class="${u.plan === 'pro' ? 'plan-pro' : u.plan === 'enterprise' ? 'plan-enterprise' : ''}">${u.plan}</td>
+            <td class="${u.plan === 'pro' ? 'plan-pro' : u.plan === 'enterprise' ? 'plan-enterprise' : ''}">${esc(u.plan)}</td>
             <td>${u.analysis_count}</td>
             <td>${u.active_api_keys}</td>
             <td class="${u.is_active ? 'status-active' : 'status-inactive'}">${u.is_active ? 'Active' : 'Inactive'}</td>
@@ -241,23 +241,23 @@ window._adminViewUser = async (id) => {
             <div class="detail-row"><span class="label">Email</span><span>${esc(u.email)}</span></div>
             <div class="detail-row"><span class="label">Active</span><span class="${u.is_active ? 'status-active' : 'status-inactive'}">${u.is_active ? 'Yes' : 'No'}</span></div>
             <div class="detail-row"><span class="label">Admin</span><span>${u.is_admin ? 'Yes' : 'No'}</span></div>
-            <div class="detail-row"><span class="label">Plan</span><span>${u.subscription.plan}</span></div>
+            <div class="detail-row"><span class="label">Plan</span><span>${esc(u.subscription.plan)}</span></div>
             <div class="detail-row"><span class="label">Requests/day</span><span>${u.subscription.requests_per_day}</span></div>
             <div class="detail-row"><span class="label">Analyses</span><span>${u.analysis_count}</span></div>
             <div class="detail-row"><span class="label">Saved Graphs</span><span>${u.saved_graph_count}</span></div>
             <div class="detail-row"><span class="label">Joined</span><span>${new Date(u.created_at).toLocaleDateString()}</span></div>
 
-            <h4 style="margin-top:18px;margin-bottom:8px;">API Keys (${u.api_keys.length})</h4>
+            <h4 style="margin-top:18px;margin-bottom:8px;">Active API Keys (${u.api_keys.filter(k => k.is_active).length})</h4>
             <div class="key-list">
-                ${u.api_keys.map((k) => `
+                ${u.api_keys.filter(k => k.is_active).map((k) => `
                     <div class="key-item">
                         <div>
                             <span class="key-prefix">${esc(k.key_prefix)}...</span>
                             <span style="color:var(--muted);margin-left:8px">${esc(k.name || '')}</span>
                         </div>
                         <div>
-                            <span class="key-status ${k.is_active ? 'status-active' : 'status-inactive'}">${k.is_active ? 'Active' : 'Revoked'}</span>
-                            ${k.is_active ? `<button class="btn-sm btn-danger" onclick="window._adminRevokeKey(${k.id}, ${u.id})">Revoke</button>` : ""}
+                            <span class="key-status status-active">Active</span>
+                            <button class="btn-sm btn-danger" onclick="window._adminRevokeKey(${k.id}, ${u.id})">Revoke</button>
                         </div>
                     </div>
                 `).join("")}
@@ -359,6 +359,18 @@ window._adminEditUser = async (id) => {
             const fd = new FormData(e.target);
             const editErr = document.getElementById("editError");
             editErr.textContent = "";
+
+            // Validate username
+            const uname = (fd.get("username") || "").trim();
+            if (uname.length < 3 || uname.length > 64) { editErr.textContent = "Username must be 3–64 characters."; return; }
+            if (!/^[a-zA-Z]/.test(uname)) { editErr.textContent = "Username must start with a letter."; return; }
+            if (!/^[a-zA-Z0-9_\-]+$/.test(uname)) { editErr.textContent = "Username can only contain letters, numbers, _ and -."; return; }
+            if (/[_\-]{2}/.test(uname)) { editErr.textContent = "Username cannot have consecutive _ or -."; return; }
+
+            // Validate email
+            const uemail = (fd.get("email") || "").trim();
+            if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(uemail)) { editErr.textContent = "Please enter a valid email address."; return; }
+
             try {
                 // Update user fields
                 await adminFetch(`/admin/users/${id}`, {

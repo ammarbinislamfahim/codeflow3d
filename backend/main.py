@@ -14,7 +14,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from prometheus_client import Counter, Summary, start_http_server
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -108,21 +108,62 @@ app.add_middleware(
 _ALLOWED_LANGUAGES = {"python", "c", "cpp", "java", "javascript", "typescript"}
 
 
+def _validate_email_strict(email: str) -> str:
+    """Normalize and strictly validate an email address."""
+    email = email.strip().lower()
+    if not re.match(r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$', email):
+        raise ValueError("Invalid email address")
+    domain = email.split('@')[1]
+    if domain in {
+        'test.com', 'example.com', 'example.org', 'example.net',
+        'invalid.com', 'localhost', 'tempmail.com',
+        'throwaway.email', 'mailinator.com', 'guerrillamail.com',
+        'sharklasers.com', 'yopmail.com', 'trashmail.com',
+    }:
+        raise ValueError("Disposable or invalid email domains are not allowed")
+    return email
+
+
+def _validate_username(username: str) -> str:
+    """Validate username: starts with letter, 3-64 chars, alphanumeric/_ /-, no consecutive special."""
+    if len(username) < 3 or len(username) > 64:
+        raise ValueError("Username must be 3–64 characters")
+    if not re.match(r'^[a-zA-Z]', username):
+        raise ValueError("Username must start with a letter")
+    if not re.match(r'^[a-zA-Z0-9_\-]+$', username):
+        raise ValueError("Username can only contain letters, numbers, _ and -")
+    if re.search(r'[_\-]{2}', username):
+        raise ValueError("Username cannot have consecutive _ or -")
+    return username
+
+
 class UserRegister(BaseModel):
-    username: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_\-]+$")
+    username: str = Field(min_length=3, max_length=64)
     email: EmailStr
     password: str
 
+    @field_validator("username")
+    @classmethod
+    def username_rules(cls, v: str) -> str:
+        return _validate_username(v)
+
+    @field_validator("email")
+    @classmethod
+    def email_strict(cls, v: str) -> str:
+        return _validate_email_strict(v)
+
     @field_validator("password")
     @classmethod
-    def password_min_length(cls, v: str) -> str:
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters")
+    def password_strength(cls, v: str) -> str:
+        from auth.security import validate_password_strength
+        failures = validate_password_strength(v)
+        if failures:
+            raise ValueError("Password requirements not met: " + "; ".join(failures))
         return v
 
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    login: str = Field(min_length=1, description="Email or username")
     password: str
 
 
@@ -154,8 +195,8 @@ class AnalyzeResponse(BaseModel):
 
 
 class SaveGraphRequest(BaseModel):
-    title: str
-    description: Optional[str] = None
+    title: str = Field(min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=1000)
     code: str
     language: str
     graph_data: dict
@@ -163,7 +204,7 @@ class SaveGraphRequest(BaseModel):
 
 
 class CreateApiKeyRequest(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=100)
 
 # Auth
 
@@ -189,7 +230,7 @@ def verify_api_key_dep(request: Request, db: Session = Depends(get_db)):
     if not api_key.user.is_active:
         raise HTTPException(status_code=403, detail="User inactive")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if not api_key.last_used_at or (now - api_key.last_used_at).total_seconds() > 60:
         api_key.last_used_at = now
         db.commit()
@@ -222,7 +263,7 @@ def check_plan_limits(user: User, db: Session):
         db.add(sub)
         db.commit()
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     today_start = datetime(today.year, today.month, today.day)
 
     today_count = db.query(Analysis).filter(
@@ -281,18 +322,23 @@ async def test_flow():
 
 
 @app.post("/register")
-async def register(user: UserRegister, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def register(request: Request, user: UserRegister, db: Session = Depends(get_db)):
     """Register new user"""
-    if db.query(User).filter(User.email == user.email).first():
+    normalized_email = user.email.strip().lower()
+    normalized_username = user.username.strip()
+
+    if db.query(User).filter(User.email == normalized_email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    if db.query(User).filter(User.username == user.username).first():
+    from sqlalchemy import func
+    if db.query(User).filter(func.lower(User.username) == normalized_username.lower()).first():
         raise HTTPException(status_code=400, detail="Username already taken")
 
     hashed_password = hash_password(user.password)
     new_user = User(
-        username=user.username,
-        email=user.email,
+        username=normalized_username,
+        email=normalized_email,
         password_hash=hashed_password
     )
 
@@ -327,13 +373,23 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
 
 
 @app.post("/login")
-async def login(creds: UserLogin, db: Session = Depends(get_db)):
-    """Login user and return JWT token"""
-    user = db.query(User).filter(User.email == creds.email).first()
+@limiter.limit("10/minute")
+async def login(request: Request, creds: UserLogin, db: Session = Depends(get_db)):
+    """Login user with email or username and return JWT token"""
+    identifier = creds.login.strip()
+    from sqlalchemy import func
+    # Check if login looks like an email
+    if '@' in identifier:
+        user = db.query(User).filter(User.email == identifier.lower()).first()
+    else:
+        user = db.query(User).filter(func.lower(User.username) == identifier.lower()).first()
 
     if not user or not verify_password(creds.password, user.password_hash):
-        logger.warning(f"Failed login attempt: {creds.email}")
+        logger.warning("Failed login attempt for identifier: %s", creds.login[:100].replace('\n', '').replace('\r', ''))
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
 
     token = create_access_token(user.id)
 
@@ -348,6 +404,7 @@ async def login(creds: UserLogin, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/api-key")
+@limiter.limit("10/minute")
 async def exchange_token_for_api_key(request: Request, db: Session = Depends(get_db)):
     """Exchange a valid JWT (from /login) for a fresh API key. Key is returned once and never stored in plaintext."""
     auth_header = request.headers.get("Authorization", "")
@@ -368,7 +425,7 @@ async def exchange_token_for_api_key(request: Request, db: Session = Depends(get
         APIKey.user_id == user.id,
         APIKey.name == "Session",
         APIKey.revoked_at.is_(None)
-    ).update({"revoked_at": datetime.utcnow()}, synchronize_session=False)
+    ).update({"revoked_at": datetime.now(timezone.utc)}, synchronize_session=False)
     api_key = APIKey(
         user_id=user.id,
         key_hash=key_hash,
@@ -598,7 +655,7 @@ async def analyze(
         except Exception as e:
             logger.exception(f"Analyze error: {e}")
             REQUESTS_TOTAL.labels(endpoint="analyze", status="error").inc()
-            raise HTTPException(status_code=500, detail=str(e)[:100])
+            raise HTTPException(status_code=500, detail="Internal analysis error")
 
 
 @app.get("/task/{task_id}")
@@ -855,7 +912,7 @@ async def revoke_api_key(
     ).first()
     if not target:
         raise HTTPException(status_code=404, detail="API key not found")
-    target.revoked_at = datetime.utcnow()
+    target.revoked_at = datetime.now(timezone.utc)
     db.commit()
     prune_revoked_keys(api_key.user_id, db)
     logger.info(f"API key revoked: id={key_id}, user={api_key.user_id}")
@@ -892,7 +949,7 @@ async def get_my_subscription(
         db.add(sub)
         db.commit()
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     today_start = datetime(today.year, today.month, today.day)
     today_count = db.query(Analysis).filter(
         Analysis.user_id == api_key.user_id,
@@ -955,10 +1012,24 @@ def verify_admin(request: Request, db: Session = Depends(get_db)):
 # --- Admin Pydantic Models ---
 
 class AdminUpdateUser(BaseModel):
-    username: Optional[str] = None
+    username: Optional[str] = Field(default=None, min_length=3, max_length=64)
     email: Optional[EmailStr] = None
     is_active: Optional[bool] = None
     is_admin: Optional[bool] = None
+
+    @field_validator("username")
+    @classmethod
+    def username_rules(cls, v):
+        if v is not None:
+            return _validate_username(v)
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def email_strict(cls, v):
+        if v is not None:
+            return _validate_email_strict(v)
+        return v
 
 
 class AdminUpdateSubscription(BaseModel):
@@ -976,7 +1047,7 @@ async def admin_stats(
 ):
     """Dashboard stats overview"""
     from sqlalchemy import func
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     today_start = datetime(today.year, today.month, today.day)
 
     total_users = db.query(User).count()
@@ -1117,15 +1188,17 @@ async def admin_update_user(
         raise HTTPException(status_code=404, detail="User not found")
 
     if updates.username is not None:
-        existing = db.query(User).filter(User.username == updates.username, User.id != user_id).first()
+        from sqlalchemy import func
+        existing = db.query(User).filter(func.lower(User.username) == updates.username.lower(), User.id != user_id).first()
         if existing:
             raise HTTPException(status_code=400, detail="Username already taken")
-        user.username = updates.username
+        user.username = updates.username.strip()
     if updates.email is not None:
-        existing = db.query(User).filter(User.email == updates.email, User.id != user_id).first()
+        normalized_email = updates.email.strip().lower()
+        existing = db.query(User).filter(User.email == normalized_email, User.id != user_id).first()
         if existing:
             raise HTTPException(status_code=400, detail="Email already registered")
-        user.email = updates.email
+        user.email = normalized_email
     if updates.is_active is not None:
         user.is_active = updates.is_active
     if updates.is_admin is not None:
@@ -1234,7 +1307,7 @@ async def admin_reset_user_api_keys(
     db.query(APIKey).filter(
         APIKey.user_id == user_id,
         APIKey.revoked_at.is_(None)
-    ).update({"revoked_at": datetime.utcnow()}, synchronize_session=False)
+    ).update({"revoked_at": datetime.now(timezone.utc)}, synchronize_session=False)
 
     raw_key = generate_api_key()
     key_hash = hash_api_key(raw_key)
@@ -1262,7 +1335,7 @@ async def admin_revoke_api_key(
     key = db.query(APIKey).filter(APIKey.id == key_id).first()
     if not key:
         raise HTTPException(status_code=404, detail="API key not found")
-    key.revoked_at = datetime.utcnow()
+    key.revoked_at = datetime.now(timezone.utc)
     db.commit()
     prune_revoked_keys(key.user_id, db)
     logger.info(f"Admin {admin.id} revoked API key {key_id}")

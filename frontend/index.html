@@ -209,8 +209,8 @@
                     <h1>Sign In</h1>
                     <div class="auth-brand-sub">Access your 3D execution atlas</div>
                     <div class="auth-input-box">
-                        <input id="loginEmail" class="auth-input" type="email" placeholder="Email" autocomplete="email" />
-                        <i class='bx bxs-envelope'></i>
+                        <input id="loginEmail" class="auth-input" type="text" placeholder="Email or Username" autocomplete="username" />
+                        <i class='bx bxs-user'></i>
                     </div>
                     <div class="auth-input-box">
                         <input id="loginPassword" class="auth-input" type="password" placeholder="Password" autocomplete="current-password" />
@@ -241,13 +241,32 @@
                         <input id="regUsername" class="auth-input" type="text" placeholder="Username" autocomplete="username" />
                         <i class='bx bxs-user'></i>
                     </div>
+                    <div id="usernameRules" class="pw-rules">
+                        <ul class="pw-checklist">
+                            <li id="unRuleLen"><span class="pw-icon">○</span> 3 – 64 characters</li>
+                            <li id="unRuleStart"><span class="pw-icon">○</span> Starts with a letter</li>
+                            <li id="unRuleChars"><span class="pw-icon">○</span> Letters, numbers, _ or - only</li>
+                            <li id="unRuleNoDouble"><span class="pw-icon">○</span> No consecutive _ or -</li>
+                        </ul>
+                    </div>
                     <div class="auth-input-box">
                         <input id="regEmail" class="auth-input" type="email" placeholder="Email" autocomplete="email" />
                         <i class='bx bxs-envelope'></i>
                     </div>
                     <div class="auth-input-box">
-                        <input id="regPassword" class="auth-input" type="password" placeholder="Password (8+ characters)" autocomplete="new-password" />
+                        <input id="regPassword" class="auth-input" type="password" placeholder="Password" autocomplete="new-password" />
                         <i class='bx bxs-lock-alt'></i>
+                    </div>
+                    <div id="passwordRules" class="pw-rules">
+                        <div class="pw-strength-bar"><div id="pwStrengthFill" class="pw-strength-fill"></div></div>
+                        <div id="pwStrengthLabel" class="pw-strength-label"></div>
+                        <ul class="pw-checklist">
+                            <li id="pwRuleLen"><span class="pw-icon">○</span> At least 8 characters</li>
+                            <li id="pwRuleUpper"><span class="pw-icon">○</span> One uppercase letter</li>
+                            <li id="pwRuleLower"><span class="pw-icon">○</span> One lowercase letter</li>
+                            <li id="pwRuleDigit"><span class="pw-icon">○</span> One number</li>
+                            <li id="pwRuleSpecial"><span class="pw-icon">○</span> One special character (!@#$...)</li>
+                        </ul>
                     </div>
                     <button id="registerSubmitBtn" class="auth-submit-btn">Create Account</button>
                     <div id="registerError" class="auth-error"></div>

@@ -15,7 +15,7 @@
         <div class="login-card">
             <h1>🔐 Admin Login</h1>
             <p>Sign in with an admin account.</p>
-            <input type="email" id="adminEmail" placeholder="Email" autocomplete="email" />
+            <input type="text" id="adminEmail" placeholder="Email or Username" autocomplete="username" />
             <input type="password" id="adminPassword" placeholder="Password" autocomplete="current-password" />
             <button id="adminLoginBtn">Sign In</button>
             <div id="loginError" class="error-text"></div>
@@ -24,7 +24,9 @@
 
     <!-- Admin shell (hidden until auth) -->
     <div id="adminShell" class="admin-shell" style="display:none">
-        <nav class="sidebar">
+        <button id="sidebarToggle" class="sidebar-toggle" aria-label="Toggle menu">☰</button>
+        <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+        <nav class="sidebar" id="sidebar">
             <div class="sidebar-brand">
                 <h2>CodeFlow3D</h2>
                 <span class="badge">Admin</span>
@@ -140,5 +142,26 @@
     </div>
 
     <script type="module" src="src/admin.js"></script>
+    <script>
+        // Sidebar drawer toggle for mobile
+        (function() {
+            const toggle = document.getElementById('sidebarToggle');
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebarBackdrop');
+            function closeSidebar() {
+                sidebar.classList.remove('open');
+                backdrop.classList.remove('visible');
+            }
+            toggle.addEventListener('click', function() {
+                const open = sidebar.classList.toggle('open');
+                backdrop.classList.toggle('visible', open);
+            });
+            backdrop.addEventListener('click', closeSidebar);
+            // Close sidebar when a nav link is tapped
+            sidebar.querySelectorAll('.nav-links a').forEach(function(a) {
+                a.addEventListener('click', closeSidebar);
+            });
+        })();
+    </script>
 </body>
 </html>
