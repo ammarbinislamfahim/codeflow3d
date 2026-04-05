@@ -119,6 +119,16 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# Global unhandled-exception logger – ensures stack traces for dependency
+# errors (e.g. verify_api_key_dep) appear in Render logs.
+from starlette.requests import Request as _StarletteRequest
+from starlette.responses import JSONResponse as _JSONResponse
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: _StarletteRequest, exc: Exception):
+    logger.exception("Unhandled %s on %s %s", type(exc).__name__, request.method, request.url.path)
+    return _JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -255,9 +265,11 @@ def verify_api_key_dep(request: Request, db: Session = Depends(get_db)):
     if not api_key.user.is_active:
         raise HTTPException(status_code=403, detail="User inactive")
 
-    now = datetime.now(timezone.utc)
-    if not api_key.last_used_at or (now - api_key.last_used_at).total_seconds() > 60:
-        api_key.last_used_at = now
+    # DB stores naive-UTC timestamps (DateTime without timezone=True),
+    # so we must compare / store naive-UTC here to avoid TypeError.
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    if not api_key.last_used_at or (now_utc - api_key.last_used_at).total_seconds() > 60:
+        api_key.last_used_at = now_utc
         db.commit()
 
     return api_key
@@ -289,7 +301,7 @@ def check_plan_limits(user: User, db: Session):
         db.commit()
 
     today = datetime.now(timezone.utc).date()
-    today_start = datetime(today.year, today.month, today.day)
+    today_start = datetime(today.year, today.month, today.day)  # naive UTC, matches DB
 
     today_count = db.query(Analysis).filter(
         Analysis.user_id == user.id,
@@ -987,7 +999,7 @@ async def get_my_subscription(
         db.commit()
 
     today = datetime.now(timezone.utc).date()
-    today_start = datetime(today.year, today.month, today.day)
+    today_start = datetime(today.year, today.month, today.day)  # naive UTC, matches DB
     today_count = db.query(Analysis).filter(
         Analysis.user_id == api_key.user_id,
         Analysis.created_at >= today_start
