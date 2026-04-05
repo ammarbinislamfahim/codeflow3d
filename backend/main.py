@@ -45,9 +45,11 @@ CACHE_HITS = Counter('codeflow_cache_hits_total', 'Cache hits')
 ANALYSIS_TIME = Summary('codeflow_analysis_seconds', 'Analysis time')
 
 # Config
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:5500").split(",")
+ALLOWED_ORIGINS = [
+    o.strip() for o in
+    os.getenv("ALLOWED_ORIGINS", "http://localhost:5500").split(",")
+    if o.strip()
+]
 MAX_CODE_SIZE = 50_000
 MAX_LOOPS = 150
 ASYNC_THRESHOLD = 10_000  # Code larger than this (chars) is dispatched to Celery

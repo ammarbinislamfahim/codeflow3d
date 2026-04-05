@@ -722,10 +722,10 @@ async function initApp() {
     backendConnected = await testBackendConnection();
 
     if (!backendConnected) {
-        console.warn("⚠️ Backend offline - run: uvicorn main:app --reload");
+        console.warn("⚠️ Backend offline");
         generateBtn.disabled = true;
         generateBtn.textContent = "⚠️ Backend offline";
-        showError("Backend is offline. Run: uvicorn main:app --reload");
+        showError("Backend is offline. If deployed, wait ~30s for Render free tier to wake up and refresh the page.");
     } else {
         console.log("✅ Backend connected");
         clearError();
@@ -843,7 +843,7 @@ generateBtn.addEventListener("click", async () => {
     }
 
     if (!backendConnected) {
-        showError("Backend offline. Run: uvicorn main:app --reload");
+        showError("Backend offline. If deployed, wait ~30s for Render free tier to wake up and refresh the page.");
         return;
     }
 

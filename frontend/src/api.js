@@ -25,19 +25,31 @@ export function onStaledKey(fn) { _on401Handler = fn; }
 function _handle401() { if (_on401Handler) _on401Handler(); }
 
 /**
- * Test backend connectivity
+ * Test backend connectivity (retries for Render free-tier cold starts)
  */
 export async function testBackendConnection() {
-    try {
-        console.log("🔍 Testing backend connection...");
-        const response = await fetch(PING_URL);
-        const data = await response.json();
-        console.log("✅ Backend connected:", data);
-        return true;
-    } catch (error) {
-        console.error("❌ Backend connection failed:", error);
-        return false;
+    const MAX_RETRIES = 3;
+    const RETRY_DELAY = 5000; // 5 seconds between retries
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+            console.log(`🔍 Testing backend connection (attempt ${attempt}/${MAX_RETRIES})...`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s per attempt
+            const response = await fetch(PING_URL, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            const data = await response.json();
+            console.log("✅ Backend connected:", data);
+            return true;
+        } catch (error) {
+            console.warn(`⏳ Backend attempt ${attempt}/${MAX_RETRIES} failed:`, error.message);
+            if (attempt < MAX_RETRIES) {
+                await new Promise(r => setTimeout(r, RETRY_DELAY));
+            }
+        }
     }
+    console.error("❌ Backend connection failed after all retries. URL:", PING_URL);
+    return false;
 }
 
 /**
@@ -84,7 +96,7 @@ export async function sendCode(language, code) {
         console.groupEnd();
 
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s for Render cold starts
 
         const response = await fetch(API_URL, {
             method: "POST",
@@ -122,12 +134,19 @@ export async function sendCode(language, code) {
         return data;
     } catch (error) {
         console.error("🔴 API Error:", error);
+        let msg = error.message || "Failed to connect to server";
+        // Provide actionable error messages for common deployment issues
+        if (error.name === "AbortError") {
+            msg = "Request timed out. The backend may be waking up (Render free tier). Please try again in a few seconds.";
+        } else if (msg === "Failed to fetch") {
+            msg = `Cannot reach backend at ${API_BASE}. Check that VITE_API_URL is set correctly on Netlify and ALLOWED_ORIGINS includes your Netlify URL on Render.`;
+        }
         return {
             nodes: [],
             edges: [],
             loops: [],
             conditionals: [],
-            error: error.message || "Failed to connect to server",
+            error: msg,
         };
     }
 }
