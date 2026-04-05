@@ -27,28 +27,45 @@ function _handle401() { if (_on401Handler) _on401Handler(); }
 /**
  * Test backend connectivity (retries for Render free-tier cold starts)
  */
-export async function testBackendConnection() {
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY = 5000; // 5 seconds between retries
+/**
+ * Test backend connectivity (retries for Render free-tier cold starts).
+ * Cold starts on Render free tier can take 60-120+ seconds.
+ * @param {function} onStatus - Optional callback(msg) for live status updates
+ */
+export async function testBackendConnection(onStatus = null) {
+    const MAX_RETRIES = 8;
+    const PER_ATTEMPT_TIMEOUT = 20000; // 20s per attempt
+    const RETRY_DELAY = 3000;          // 3s between retries
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
-            console.log(`🔍 Testing backend connection (attempt ${attempt}/${MAX_RETRIES})...`);
+            const status = attempt === 1
+                ? "Connecting to backend..."
+                : `Waking up backend (attempt ${attempt}/${MAX_RETRIES})...`;
+            console.log(`🔍 ${status}`);
+            if (onStatus) onStatus(status);
+
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s per attempt
-            const response = await fetch(PING_URL, { signal: controller.signal });
+            const timeoutId = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT);
+            const response = await fetch(PING_URL, {
+                signal: controller.signal,
+                cache: "no-store",          // bypass HTTP cache
+            });
             clearTimeout(timeoutId);
             const data = await response.json();
             console.log("✅ Backend connected:", data);
+            if (onStatus) onStatus(null); // clear status
             return true;
         } catch (error) {
             console.warn(`⏳ Backend attempt ${attempt}/${MAX_RETRIES} failed:`, error.message);
             if (attempt < MAX_RETRIES) {
+                if (onStatus) onStatus(`Backend is waking up... retrying in ${RETRY_DELAY / 1000}s (${attempt}/${MAX_RETRIES})`);
                 await new Promise(r => setTimeout(r, RETRY_DELAY));
             }
         }
     }
     console.error("❌ Backend connection failed after all retries. URL:", PING_URL);
+    if (onStatus) onStatus(null);
     return false;
 }
 
@@ -80,74 +97,86 @@ export async function getTestFlowGraph() {
 }
 
 /**
- * Send code to backend for analysis
+ * Send code to backend for analysis (retries once on cold-start failures)
  */
 export async function sendCode(language, code) {
-    try {
-        const payload = {
-            language: language,
-            code: code,
-        };
+    const MAX_SEND_RETRIES = 2; // 1 normal + 1 retry if "Failed to fetch"
 
-        console.group("📤 API Request");
-        console.log("URL:", API_URL);
-        console.log("Language:", language);
-        console.log("Code length:", code.length);
-        console.groupEnd();
+    for (let attempt = 1; attempt <= MAX_SEND_RETRIES; attempt++) {
+        try {
+            const payload = { language, code };
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s for Render cold starts
+            if (attempt === 1) {
+                console.group("📤 API Request");
+                console.log("URL:", API_URL);
+                console.log("Language:", language);
+                console.log("Code length:", code.length);
+                console.groupEnd();
+            } else {
+                console.log(`📤 Retrying analysis (attempt ${attempt})...`);
+            }
 
-        const response = await fetch(API_URL, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "x-api-key": getApiKey()
-            },
-            body: JSON.stringify(payload),
-            signal: controller.signal,
-        });
-        clearTimeout(timeoutId);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s
 
-        console.log("📬 Response status:", response.status, response.statusText);
+            const response = await fetch(API_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-api-key": getApiKey()
+                },
+                body: JSON.stringify(payload),
+                signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
 
-        if (!response.ok) {
-            if (response.status === 401) _handle401();
-            const errorText = await response.text();
-            console.error("❌ HTTP Error:", response.status, errorText);
-            throw new Error(
-                `Server Error (${response.status}): ${errorText || "Unknown error"}`
-            );
+            console.log("📬 Response status:", response.status, response.statusText);
+
+            if (!response.ok) {
+                if (response.status === 401) _handle401();
+                const errorText = await response.text();
+                console.error("❌ HTTP Error:", response.status, errorText);
+                throw new Error(
+                    `Server Error (${response.status}): ${errorText || "Unknown error"}`
+                );
+            }
+
+            const data = await response.json();
+
+            console.group("✅ API Response");
+            console.log("Nodes:", data.nodes?.length || 0);
+            console.log("Edges:", data.edges?.length || 0);
+            console.log("Loops:", data.loops?.length || 0);
+            console.log("Conditionals:", data.conditionals?.length || 0);
+            if (data.error) console.warn("Error:", data.error);
+            if (data.debug) console.log("Debug info:", data.debug);
+            console.groupEnd();
+
+            return data;
+        } catch (error) {
+            const isNetworkError = error.message === "Failed to fetch" || error.name === "AbortError";
+
+            // Retry once on network/timeout errors (backend may have been asleep)
+            if (isNetworkError && attempt < MAX_SEND_RETRIES) {
+                console.warn(`⏳ Network error, waking backend and retrying in 5s...`);
+                // Fire a quick ping to help wake the backend before retrying
+                try { fetch(PING_URL, { cache: "no-store" }); } catch (_) {}
+                await new Promise(r => setTimeout(r, 5000));
+                continue;
+            }
+
+            console.error("🔴 API Error:", error);
+            let msg = error.message || "Failed to connect to server";
+            if (error.name === "AbortError") {
+                msg = "Request timed out. The backend may be waking up (Render free tier). Please try again in a few seconds.";
+            } else if (msg === "Failed to fetch") {
+                msg = `Cannot reach backend at ${API_BASE}. The server may still be starting up — please wait 30 seconds and try again.`;
+            }
+            return {
+                nodes: [], edges: [], loops: [], conditionals: [],
+                error: msg,
+            };
         }
-
-        const data = await response.json();
-
-        console.group("✅ API Response");
-        console.log("Nodes:", data.nodes?.length || 0);
-        console.log("Edges:", data.edges?.length || 0);
-        console.log("Loops:", data.loops?.length || 0);
-        console.log("Conditionals:", data.conditionals?.length || 0);
-        if (data.error) console.warn("Error:", data.error);
-        if (data.debug) console.log("Debug info:", data.debug);
-        console.groupEnd();
-
-        return data;
-    } catch (error) {
-        console.error("🔴 API Error:", error);
-        let msg = error.message || "Failed to connect to server";
-        // Provide actionable error messages for common deployment issues
-        if (error.name === "AbortError") {
-            msg = "Request timed out. The backend may be waking up (Render free tier). Please try again in a few seconds.";
-        } else if (msg === "Failed to fetch") {
-            msg = `Cannot reach backend at ${API_BASE}. Check that VITE_API_URL is set correctly on Netlify and ALLOWED_ORIGINS includes your Netlify URL on Render.`;
-        }
-        return {
-            nodes: [],
-            edges: [],
-            loops: [],
-            conditionals: [],
-            error: msg,
-        };
     }
 }
 
@@ -217,13 +246,26 @@ async function graphsRequest(path, method = 'GET', body = null) {
         headers: { 'Content-Type': 'application/json', 'x-api-key': getApiKey() },
     };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(`${API_BASE}${path}`, opts);
-    if (!res.ok) {
-        if (res.status === 401) _handle401();
-        const text = await res.text();
-        throw new Error(`${res.status}: ${text}`);
+
+    // Retry once on network errors (cold start)
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            const res = await fetch(`${API_BASE}${path}`, opts);
+            if (!res.ok) {
+                if (res.status === 401) _handle401();
+                const text = await res.text();
+                throw new Error(`${res.status}: ${text}`);
+            }
+            return res.json();
+        } catch (err) {
+            if (attempt === 0 && (err.message === "Failed to fetch" || err.name === "TypeError")) {
+                console.warn(`⏳ ${path} failed, retrying after wake-up delay...`);
+                await new Promise(r => setTimeout(r, 4000));
+                continue;
+            }
+            throw err;
+        }
     }
-    return res.json();
 }
 
 export async function saveGraph(title, description, code, language, graphData, isPublic = false) {

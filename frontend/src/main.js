@@ -719,13 +719,25 @@ async function initApp() {
     checkScene();
 
     console.log("🔍 Testing backend...");
-    backendConnected = await testBackendConnection();
+    backendConnected = await testBackendConnection((status) => {
+        if (status) {
+            // Show live wake-up progress in the error banner (styled as info, not error)
+            errorBox.style.background = "rgba(30, 58, 138, 0.95)";
+            errorBox.style.borderColor = "rgba(96, 165, 250, 0.5)";
+            errorBox.style.color = "#bfdbfe";
+            errorBox.textContent = "⏳ " + status;
+            errorBox.classList.add("show");
+        } else {
+            errorBox.style.cssText = "";
+            errorBox.classList.remove("show");
+        }
+    });
 
     if (!backendConnected) {
         console.warn("⚠️ Backend offline");
         generateBtn.disabled = true;
         generateBtn.textContent = "⚠️ Backend offline";
-        showError("Backend is offline. If deployed, wait ~30s for Render free tier to wake up and refresh the page.");
+        showError("Backend is offline. Render free tier can take up to 2 minutes to wake up. Please refresh the page and try again.");
     } else {
         console.log("✅ Backend connected");
         clearError();
@@ -843,8 +855,21 @@ generateBtn.addEventListener("click", async () => {
     }
 
     if (!backendConnected) {
-        showError("Backend offline. If deployed, wait ~30s for Render free tier to wake up and refresh the page.");
-        return;
+        // Try to reconnect before giving up
+        generateBtn.disabled = true;
+        generateBtn.textContent = "⏳ Waking backend...";
+        backendConnected = await testBackendConnection((status) => {
+            if (status) generateBtn.textContent = "⏳ " + status;
+        });
+        if (!backendConnected) {
+            generateBtn.disabled = false;
+            generateBtn.textContent = "▶ Generate";
+            showError("Backend is still waking up. Please wait a moment and try again.");
+            return;
+        }
+        generateBtn.disabled = false;
+        generateBtn.textContent = "▶ Generate";
+        clearError();
     }
 
     if (!sceneReady) {
