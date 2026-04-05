@@ -103,8 +103,12 @@ docker-compose logs backend | grep "API Key"
    - Build command: `npm install && npm run build`
    - Publish directory: `frontend/dist`
 4. Add environment variable:
-   - `VITE_API_URL` = your Render backend URL (e.g. `https://codeflow3d-backend.onrender.com`)
+   - `BACKEND_URL` = your Render backend URL (e.g. `https://codeflow3d-backend.onrender.com`)
 5. Deploy.
+
+> **How it works:** Netlify proxies all `/api/*` requests to your Render backend (configured in `netlify.toml`).
+> The frontend talks to `/api/ping`, `/api/analyze`, etc. on the same origin — **no CORS issues**.
+> You do **NOT** need to set `VITE_API_URL` on Netlify. Only set `BACKEND_URL`.
 
 ### Backend → Render (Free Tier — Default)
 
@@ -117,11 +121,14 @@ The default `render.yaml` is configured for **Render's free tier**. It deploys:
 > **Note:** No Celery worker is deployed on the free tier. Code analysis runs synchronously
 > inside the web process. For large codebases (>10K characters), this may be slower but works
 > without a separate worker service.
+>
+> **Cold starts:** Render free tier sleeps after 15 min of inactivity. Use a free service like
+> [UptimeRobot](https://uptimerobot.com) to ping `https://your-backend.onrender.com/ping` every 14 min to prevent this.
 
 1. In [Render](https://render.com), click **New → Blueprint**.
 2. Connect your GitHub repo — Render auto-detects `render.yaml`.
 3. Set these environment variables on the **codeflow3d-backend** web service:
-   - `ALLOWED_ORIGINS` = your Netlify URL (e.g. `https://your-site.netlify.app`)
+   - `ALLOWED_ORIGINS` = `*` (or your Netlify URL, e.g. `https://your-site.netlify.app`)
    - `ADMIN_EMAIL` = your admin email
    - `ADMIN_USERNAME` = your admin username
    - `ADMIN_PASSWORD` = a strong password (min 8 chars, uppercase, lowercase, number, special character)
@@ -147,8 +154,9 @@ If you're on a **paid Render plan**, you can enable Celery workers for async pro
 | `DATABASE_URL` | PostgreSQL connection string (Render) | Auto (Render) | `postgresql://user:pass@host/db` |
 | `REDIS_URL` | Redis connection string | Auto (Render) | `redis://host:6379/0` |
 | `JWT_SECRET` / `SECRET_KEY` | JWT signing key (min 32 chars) | Yes | *(random string)* |
-| `ALLOWED_ORIGINS` | CORS allowed origins | Yes | `https://your-site.netlify.app` |
-| `VITE_API_URL` | Backend URL (frontend build) | Yes (Netlify) | `https://codeflow3d-backend.onrender.com` |
+| `ALLOWED_ORIGINS` | CORS allowed origins | Yes | `*` or `https://your-site.netlify.app` |
+| `BACKEND_URL` | Backend URL (Netlify proxy) | Yes (Netlify) | `https://codeflow3d-backend.onrender.com` |
+| `VITE_API_URL` | Override API base URL (dev only) | No | `http://localhost:8000` |
 | `ADMIN_EMAIL` | Auto-create admin on startup | Optional | `admin@yourdomain.com` |
 | `ADMIN_USERNAME` | Admin username | Optional | `admin` |
 | `ADMIN_PASSWORD` | Admin password (must meet strength rules) | Optional | `Admin@1234` |

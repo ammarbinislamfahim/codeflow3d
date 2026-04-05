@@ -1,6 +1,8 @@
 /* API handler for CodeFlow3D - PRODUCTION READY */
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// In production: VITE_API_URL is NOT set → defaults to "/api" (same-origin proxy via Netlify)
+// In development: VITE_API_URL = "http://localhost:8000" (direct to local backend)
+const API_BASE = import.meta.env.VITE_API_URL || "/api";
 const API_URL = `${API_BASE}/analyze`;
 const TEST_URL = `${API_BASE}/test`;
 const PING_URL = `${API_BASE}/ping`;
