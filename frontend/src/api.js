@@ -308,7 +308,11 @@ async function authPost(path, body) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+        throw new Error(res.ok ? 'Invalid server response' : `Error ${res.status}: ${text.slice(0, 120)}`);
+    }
     if (!res.ok) {
         let msg = `Error ${res.status}`;
         if (typeof data.detail === 'string') {
@@ -326,7 +330,11 @@ export async function exchangeTokenForKey(jwt) {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${jwt}` },
     });
-    const data = await res.json();
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch {
+        throw new Error(res.ok ? 'Invalid server response' : `Error ${res.status}: ${text.slice(0, 120)}`);
+    }
     if (!res.ok) {
         let msg = `Error ${res.status}`;
         if (typeof data.detail === 'string') {

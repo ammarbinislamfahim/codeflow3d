@@ -1,6 +1,6 @@
 [build]
   base    = "frontend"
-  command = "npm install && npm run build"
+  command = "npm install && npm run build && echo \"/api/*  $BACKEND_URL/:splat  200!\" > dist/_redirects"
   publish = "dist"
 
 [build.environment]
@@ -11,17 +11,6 @@
   from   = "/admin"
   to     = "/admin.html"
   status = 200
-
-# ── API Proxy ──────────────────────────────────────────────────────────
-# Proxy /api/* requests to the Render backend.
-# This eliminates CORS entirely — the browser talks to the same origin.
-# Set BACKEND_URL env var on Netlify (e.g. https://codeflow3d-backend.onrender.com)
-[[redirects]]
-  from   = "/api/:splat"
-  to     = ":BACKEND_URL/:splat"
-  status = 200
-  force  = true
-  headers = {X-From = "netlify"}
 
 # SPA fallback — all routes serve index.html so the JS router handles them
 [[redirects]]
